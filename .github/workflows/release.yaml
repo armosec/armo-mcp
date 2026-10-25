@@ -1,0 +1,165 @@
+name: release
+run-name: "release · ${{ github.event_name }} · ${{ github.sha }}"
+
+# Releases run in ARMO's private infrastructure, the same way armosec/helm-charts
+# runs its E2E tests. This workflow dispatches armo-mcp-release-receiver.yaml in
+# the private armosec/shared-workflows repository with the merged commit, waits
+# for it and reports the result here. The receiver checks that the commit is on
+# this repository's main branch, then builds, deploys and releases it.
+#
+# The E2E_DISPATCH App can only run workflows in armosec/shared-workflows. Its
+# credentials are org secrets granted to this repository, and only runs on main
+# in the `release` environment can read them.
+
+on:
+  push:
+    branches: [main]
+    # A pipeline or docs change must not mint a version.
+    paths-ignore:
+      - ".github/**"
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump (a push run reads the merged PR's major/minor/patch label)
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RECEIVER_REPO: armosec/shared-workflows
+  RECEIVER_WORKFLOW: armo-mcp-release-receiver.yaml
+
+jobs:
+  release:
+    if: github.repository == 'armosec/armo-mcp' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    environment: release
+    steps:
+      - name: Set dispatch info
+        id: dispatch-info
+        run: |
+          # Without the attempt number, so a re-run can find the original run.
+          echo "correlation_id=${GITHUB_REPOSITORY##*/}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.E2E_DISPATCH_APP_ID }}
+          private-key: ${{ secrets.E2E_DISPATCH_APP_PRIVATE_KEY }}
+          owner: armosec
+          repositories: shared-workflows
+          permission-actions: write
+
+      - name: Dispatch the release to the private repo
+        id: dispatch
+        if: github.run_attempt == 1
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          CORRELATION_ID: ${{ steps.dispatch-info.outputs.correlation_id }}
+          BUMP: ${{ inputs.bump }}
+          TRIGGER: ${{ github.event_name }}
+          ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          resp=$(gh api --method POST "repos/$RECEIVER_REPO/actions/workflows/$RECEIVER_WORKFLOW/dispatches" \
+            -f ref=main \
+            -F return_run_details=true \
+            -f "inputs[correlation_id]=${CORRELATION_ID}" \
+            -f "inputs[github_repository]=${GITHUB_REPOSITORY}" \
+            -f "inputs[sha]=${GITHUB_SHA}" \
+            -f "inputs[bump]=${BUMP:-}" \
+            -f "inputs[trigger]=${TRIGGER}" \
+            -f "inputs[actor]=${ACTOR}")
+          run_id=$(jq -r '.workflow_run_id // empty' <<<"$resp")
+          [ -n "$run_id" ] || { echo "::error::Dispatch did not return a run ID: $resp"; exit 1; }
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Find the release run
+        id: find-run
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          CORRELATION_ID: ${{ steps.dispatch-info.outputs.correlation_id }}
+          DISPATCHED_RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          if [ -n "$DISPATCHED_RUN_ID" ]; then
+            echo "run_id=$DISPATCHED_RUN_ID" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Re-run: find the run the first attempt started. It can take a while to show up.
+          run_id=""
+          for i in {1..15}; do
+            run_id=$(gh api "repos/$RECEIVER_REPO/actions/workflows/$RECEIVER_WORKFLOW/runs?per_page=100" \
+              --jq '.workflow_runs | map(select(.name | contains("'"$CORRELATION_ID"'"))) | first | .id // empty')
+            [ -n "$run_id" ] && break
+            echo "Attempt $i: waiting for the first attempt's run to show up..."
+            sleep 30
+          done
+          [ -n "$run_id" ] || { echo "::error::Could not find the release run for $CORRELATION_ID"; exit 1; }
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Re-run failed jobs in the private repo
+        id: rerun
+        if: github.run_attempt > 1
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RUN_ID: ${{ steps.find-run.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          conclusion=$(gh api "repos/$RECEIVER_REPO/actions/runs/$RUN_ID" --jq '.conclusion')
+          echo "Previous conclusion: $conclusion"
+          if [ "$conclusion" = "success" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$conclusion" = "cancelled" ]; then
+            gh api --method POST "repos/$RECEIVER_REPO/actions/runs/$RUN_ID/rerun"
+          else
+            gh api --method POST "repos/$RECEIVER_REPO/actions/runs/$RUN_ID/rerun-failed-jobs"
+          fi
+          for i in {1..30}; do
+            [ "$(gh api "repos/$RECEIVER_REPO/actions/runs/$RUN_ID" --jq '.status')" != "completed" ] && break
+            sleep 2
+          done
+
+      - name: Wait for the release run
+        if: steps.rerun.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RUN_ID: ${{ steps.find-run.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          for i in {1..60}; do  # 60 x 60s = 1 hour
+            read -r status conclusion < <(gh api "repos/$RECEIVER_REPO/actions/runs/$RUN_ID" \
+              --jq '[.status, .conclusion // "null"] | @tsv')
+            echo "Status: $status | Conclusion: $conclusion"
+            if [ "$status" = "completed" ]; then
+              if [ "$conclusion" = "success" ]; then
+                echo "### Release run succeeded" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+              # Name the failed jobs and steps only; their logs stay private.
+              {
+                echo "### Release run failed: \`$conclusion\`"
+                echo
+                gh api "repos/$RECEIVER_REPO/actions/runs/$RUN_ID/jobs" \
+                  --jq '.jobs[] | select(.conclusion == "failure") | "- \(.name): \([.steps[] | select(.conclusion == "failure") | .name] | join(", "))"'
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::release run finished with '$conclusion'. An ARMO maintainer can see the details."
+              exit 1
+            fi
+            sleep 60
+          done
+          echo "::error::Timed out waiting for the release run"
+          exit 1
