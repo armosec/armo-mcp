@@ -5,7 +5,13 @@ run-name: "release · ${{ github.event_name }} · ${{ github.sha }}"
 # runs its E2E tests. This workflow dispatches armo-mcp-release-receiver.yaml in
 # the private armosec/armo-mcp-release repository with the merged commit, waits
 # for it and reports the result here. The receiver checks that the commit is on
-# this repository's main branch, then builds, deploys and releases it.
+# this repository's main branch, builds it, deploys dev, takes the release lock
+# and dispatches the stage/prod release.
+#
+# Green here means the release was dispatched, not that it finished: stage and
+# prod can queue for hours behind the org-wide release mutex. The release is done
+# when its lock issue closes and the GitHub release appears; a failed release
+# leaves the lock issue open.
 #
 # The armo-mcp-dispatch App is installed only on armosec/armo-mcp-release, which
 # holds only the receiver. Its credentials are secrets of the `release`
@@ -40,8 +46,12 @@ env:
 
 jobs:
   release:
+    name: dispatch release
     if: github.repository == 'armosec/armo-mcp' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
     timeout-minutes: 70
     environment: release
     steps:
@@ -133,11 +143,13 @@ jobs:
             sleep 2
           done
 
-      - name: Wait for the release run
+      - name: Wait for build, dev deploy and dispatch
         if: steps.rerun.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.find-run.outputs.run_id }}
+          SERVER: ${{ github.server_url }}
         run: |
           set -euo pipefail
           for i in {1..60}; do  # 60 x 60s = 1 hour
@@ -146,17 +158,27 @@ jobs:
             echo "Status: $status | Conclusion: $conclusion"
             if [ "$status" = "completed" ]; then
               if [ "$conclusion" = "success" ]; then
-                echo "### Release run succeeded" >> "$GITHUB_STEP_SUMMARY"
+                lock=$(GH_TOKEN=$REPO_TOKEN gh api "repos/$GITHUB_REPOSITORY/issues?labels=release-lock&state=all&per_page=20" \
+                  --jq "[.[] | select(.title | endswith(\"run $RUN_ID\"))] | first | .html_url // empty" || true)
+                {
+                  echo "### Release dispatched: in progress"
+                  echo
+                  echo "Built, deployed to dev and handed to the stage/prod release. That can queue for hours."
+                  echo
+                  echo "- Done when the lock issue closes and the release appears: ${lock:-open \`release-lock\` issue} · [Releases]($SERVER/$GITHUB_REPOSITORY/releases)"
+                  echo "- A failed release leaves the lock issue open."
+                } >> "$GITHUB_STEP_SUMMARY"
+                echo "::notice title=Release dispatched::in progress - done when ${lock:-the release-lock issue} closes"
                 exit 0
               fi
               # Name the failed jobs and steps only; their logs stay private.
               {
-                echo "### Release run failed: \`$conclusion\`"
+                echo "### Release not dispatched: \`$conclusion\`"
                 echo
                 gh api "repos/$RECEIVER_REPO/actions/runs/$RUN_ID/jobs" \
                   --jq '.jobs[] | select(.conclusion == "failure") | "- \(.name): \([.steps[] | select(.conclusion == "failure") | .name] | join(", "))"'
               } >> "$GITHUB_STEP_SUMMARY"
-              echo "::error::release run finished with '$conclusion'. An ARMO maintainer can see the details."
+              echo "::error::build, dev deploy or dispatch finished with '$conclusion'. An ARMO maintainer can see the details."
               exit 1
             fi
             sleep 60
