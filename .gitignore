@@ -1,0 +1,6 @@
+# Build output
+/bin/
+/armo-mcp
+
+# Local secrets (never commit)
+.env.local
