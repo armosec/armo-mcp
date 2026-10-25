@@ -3,13 +3,13 @@ run-name: "release · ${{ github.event_name }} · ${{ github.sha }}"
 
 # Releases run in ARMO's private infrastructure, the same way armosec/helm-charts
 # runs its E2E tests. This workflow dispatches armo-mcp-release-receiver.yaml in
-# the private armosec/shared-workflows repository with the merged commit, waits
+# the private armosec/armo-mcp-release repository with the merged commit, waits
 # for it and reports the result here. The receiver checks that the commit is on
 # this repository's main branch, then builds, deploys and releases it.
 #
-# The E2E_DISPATCH App can only run workflows in armosec/shared-workflows. Its
-# credentials are org secrets granted to this repository, and only runs on main
-# in the `release` environment can read them.
+# The armo-mcp-dispatch App is installed only on armosec/armo-mcp-release, which
+# holds only the receiver. Its credentials are secrets of the `release`
+# environment, which only runs on main can read.
 
 on:
   push:
@@ -35,7 +35,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RECEIVER_REPO: armosec/shared-workflows
+  RECEIVER_REPO: armosec/armo-mcp-release
   RECEIVER_WORKFLOW: armo-mcp-release-receiver.yaml
 
 jobs:
@@ -55,10 +55,10 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.E2E_DISPATCH_APP_ID }}
-          private-key: ${{ secrets.E2E_DISPATCH_APP_PRIVATE_KEY }}
+          client-id: ${{ secrets.ARMO_MCP_DISPATCH_APP_ID }}
+          private-key: ${{ secrets.ARMO_MCP_DISPATCH_APP_PRIVATE_KEY }}
           owner: armosec
-          repositories: shared-workflows
+          repositories: armo-mcp-release
           permission-actions: write
 
       - name: Dispatch the release to the private repo
