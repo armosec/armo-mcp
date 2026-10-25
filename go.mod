@@ -7,7 +7,7 @@ toolchain go1.27.3
 require (
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/go-jose/go-jose/v4 v4.1.4
-	github.com/modelcontextprotocol/go-sdk v1.6.1
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/sony/gobreaker v1.0.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
@@ -41,6 +41,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
