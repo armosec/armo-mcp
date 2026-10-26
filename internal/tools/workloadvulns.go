@@ -16,7 +16,7 @@ const (
 	// workloadVulnsMaxPageSize bounds the workloads per call; each one costs a backend request.
 	workloadVulnsMaxPageSize = 25
 	workloadVulnsDefaultSize = 10
-	// workloadVulnsMaxPerWorkload bounds the CVE rows kept per workload.
+	// workloadVulnsMaxPerWorkload bounds the backend findings read per workload, before the per-CVE dedupe.
 	workloadVulnsMaxPerWorkload = 100
 	// workloadVulnsConcurrency bounds the parallel backend requests of one call.
 	workloadVulnsConcurrency = 4
@@ -170,7 +170,8 @@ func workloadVulnNote(workloads, empty, cut int) string {
 		parts = append(parts, fmt.Sprintf("%d of them have no matching CVEs", empty))
 	}
 	if cut > 0 {
-		parts = append(parts, fmt.Sprintf("%d workloads have more than %d matching CVEs, only the first %d are shown (narrow with severity or cve)", cut, workloadVulnsMaxPerWorkload, workloadVulnsMaxPerWorkload))
+		// The cap is on backend findings (one per CVE and package), before the per-CVE dedupe.
+		parts = append(parts, fmt.Sprintf("%d workloads have more than %d matching findings (a CVE in several packages is several findings), only the first %d findings are shown so some CVEs may be missing (narrow with severity or cve)", cut, workloadVulnsMaxPerWorkload, workloadVulnsMaxPerWorkload))
 	}
 	return strings.Join(parts, "; ")
 }

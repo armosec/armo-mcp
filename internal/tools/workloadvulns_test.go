@@ -97,7 +97,7 @@ func TestQueryWorkloadVulnerabilitiesFlagsTruncation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.Note, "only the first 100 are shown") {
+	if !strings.Contains(out.Note, "only the first 100 findings are shown") {
 		t.Errorf("note = %q", out.Note)
 	}
 }
