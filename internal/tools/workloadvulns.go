@@ -153,7 +153,7 @@ func workloadFilter(in QueryWorkloadVulnInput) map[string]any {
 		"cluster":   in.Cluster,
 		"namespace": in.Namespace,
 		"kind":      strings.ToLower(in.Kind),
-		"name":      in.Workload,
+		"workload":  in.Workload, // the list filters on "workload"; its "name" key matches nothing
 	} {
 		if v != "" {
 			f[k] = v

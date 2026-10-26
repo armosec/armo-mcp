@@ -48,13 +48,13 @@ func TestQueryWorkloadVulnerabilitiesFlattensPerWorkload(t *testing.T) {
 
 	yes := true
 	out, err := s.queryWorkloadVulnerabilities(context.Background(), armo.Identity{CustomerGUID: "g", APIKey: "k"},
-		QueryWorkloadVulnInput{Cluster: "c1", Kind: "Deployment", InUse: &yes, Exploitable: &yes, Page: 2, PageSize: 50})
+		QueryWorkloadVulnInput{Cluster: "c1", Kind: "Deployment", Workload: "web", InUse: &yes, Exploitable: &yes, Page: 2, PageSize: 50})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// workload list: cluster and lowercased kind filters, page 2 (the backend's pageNum is 1-based), size clamped to the max, stable order
 	wf := wlBody["innerFilters"].([]any)[0].(map[string]any)
-	if wf["cluster"] != "c1" || wf["kind"] != "deployment" || len(wf) != 2 {
+	if wf["cluster"] != "c1" || wf["kind"] != "deployment" || wf["workload"] != "web" || len(wf) != 3 {
 		t.Errorf("workload filter = %v", wf)
 	}
 	if wlBody["pageNum"] != float64(2) || wlBody["orderBy"] != "resourceHash:asc" || wlBody["pageSize"] != float64(workloadVulnsMaxPageSize) {
