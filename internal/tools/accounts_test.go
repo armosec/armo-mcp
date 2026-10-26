@@ -309,8 +309,8 @@ func TestEveryToolAcceptsAccount(t *testing.T) {
 			t.Errorf("%s has no account parameter: %s", tool.Name, b)
 		}
 	}
-	if seen != 11 {
-		t.Errorf("checked %d tools, want 11", seen)
+	if seen != 12 {
+		t.Errorf("checked %d tools, want 12", seen)
 	}
 }
 

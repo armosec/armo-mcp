@@ -12,7 +12,7 @@ import (
 )
 
 // TestConnectivityListsAllTools is the black-box health/contract check: a
-// successful MCP connect + ListTools that advertises exactly the 12 read-only
+// successful MCP connect + ListTools that advertises exactly the 13 read-only
 // tools. (Public route exposes only /mcp; /healthz is not ingress-routed.)
 func TestConnectivityListsAllTools(t *testing.T) {
 	cfg := loadConfig(t)

@@ -161,11 +161,12 @@ Ask ARMO support for the one for your region; there is no client secret.
 
 ## What it can access
 
-Twelve tools, all read-only, all scoped to the ARMO accounts you belong to.
+Thirteen tools, all read-only, all scoped to the ARMO accounts you belong to.
 
 | Tool | What it returns |
 |---|---|
 | `query_vulnerabilities` | CVE findings, filterable by severity, CVE, in-use, exploitable and workload scope (cluster, namespace, workload, kind) |
+| `query_workload_vulnerabilities` | the CVEs of each workload, one row per workload and CVE, with the same CVE filters |
 | `query_images` | container images with vulnerability rollups |
 | `query_posture` | Kubernetes posture controls, filterable by framework |
 | `query_cloud_posture` | cloud misconfiguration controls (CSPM) |
@@ -201,7 +202,7 @@ account stays read-only there even if you are an admin elsewhere.
 The list of accounts is fixed when you sign in. If you are added to an account
 afterwards, sign in to the connector again to use it.
 
-**Nothing can be written.** The twelve tools above are the entire surface. The server
+**Nothing can be written.** The thirteen tools above are the entire surface. The server
 cannot reach any other part of the ARMO API, and that limit is enforced by ARMO's
 backend rather than by the assistant.
 
