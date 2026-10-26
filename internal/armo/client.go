@@ -89,7 +89,9 @@ func (c *Client) List(ctx context.Context, ident Identity, req ListRequest) (*Li
 		defer cancel()
 	}
 
-	body := map[string]any{"pageNum": req.PageNum, "pageSize": req.PageSize}
+	// ListRequest.PageNum is 0-based, the backend's pageNum is 1-based: it serves pageNum 0 and 1
+	// as the same first page, so sending the raw value repeats page 1 as page 2.
+	body := map[string]any{"pageNum": req.PageNum + 1, "pageSize": req.PageSize}
 	if len(req.InnerFilters) > 0 {
 		body["innerFilters"] = req.InnerFilters
 	}
