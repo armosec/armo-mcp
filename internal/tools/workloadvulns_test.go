@@ -102,6 +102,45 @@ func TestQueryWorkloadVulnerabilitiesFlagsTruncation(t *testing.T) {
 	}
 }
 
+func TestQueryWorkloadVulnerabilitiesCVENarrowsTheWorkloadList(t *testing.T) {
+	var mu sync.Mutex
+	var wlBody map[string]any
+	cveCalls := 0
+	s, closeFn := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var body map[string]any
+		_ = json.Unmarshal(b, &body)
+		mu.Lock()
+		defer mu.Unlock()
+		if strings.HasSuffix(r.URL.Path, "/workload/list") {
+			wlBody = body
+			// The backend already filtered the page on the CVE: only one workload has it.
+			_, _ = io.WriteString(w, `{"response":[{"cluster":"c","namespace":"n","kind":"deployment","name":"has-it"}],"total":{"value":1}}`)
+			return
+		}
+		cveCalls++
+		f := body["innerFilters"].([]any)[0].(map[string]any)
+		if f["workload"] != "has-it" || f["name"] != "CVE-2024-1086" {
+			t.Errorf("cve call filter = %v", f)
+		}
+		_, _ = io.WriteString(w, `{"response":[{"name":"CVE-2024-1086","severity":"High"}],"total":{"value":1}}`)
+	})
+	defer closeFn()
+	out, err := s.queryWorkloadVulnerabilities(context.Background(), armo.Identity{CustomerGUID: "g", APIKey: "k"},
+		QueryWorkloadVulnInput{CVE: "CVE-2024-1086"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the CVE goes to the workload list as cveName, so total counts only workloads that have it
+	wf := wlBody["innerFilters"].([]any)[0].(map[string]any)
+	if wf["cveName"] != "CVE-2024-1086" || len(wf) != 1 {
+		t.Errorf("workload filter = %v", wf)
+	}
+	if cveCalls != 1 || out.Total != 1 || out.Count != 1 || out.Items[0]["workload"] != "has-it" {
+		t.Errorf("calls=%d meta=%+v", cveCalls, out)
+	}
+}
+
 func TestQueryWorkloadVulnerabilitiesBackendErrorFailsTheCall(t *testing.T) {
 	s, closeFn := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/workload/list") {
