@@ -47,6 +47,10 @@ func TestListBuildsRequestAndDecodesEnvelope(t *testing.T) {
 	if gotGUID != "guid-1" {
 		t.Errorf("customerGUID = %q, want guid-1", gotGUID)
 	}
+	// PageNum is 0-based here, the backend's is 1-based (it serves 0 and 1 as the same page).
+	if gotBody["pageNum"].(float64) != 1 {
+		t.Errorf("pageNum = %v, want 1 for PageNum 0", gotBody["pageNum"])
+	}
 	if gotBody["pageSize"].(float64) != 25 {
 		t.Errorf("pageSize = %v, want 25", gotBody["pageSize"])
 	}

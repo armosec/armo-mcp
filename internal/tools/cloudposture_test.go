@@ -111,10 +111,10 @@ func TestQueryCloudPosturePaginatesAccounts(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/cloudposture/accounts"):
 			pageNum, _ := reqBody["pageNum"].(float64)
 			accountsHits = append(accountsHits, int(pageNum))
-			switch int(pageNum) {
-			case 0:
-				_, _ = io.WriteString(w, `{"response":[{"cloudAccountGUID":"a1","reportGUID":"r1"},{"cloudAccountGUID":"a2","reportGUID":"r2"}],"total":{"value":3}}`)
+			switch int(pageNum) { // the backend's pageNum is 1-based
 			case 1:
+				_, _ = io.WriteString(w, `{"response":[{"cloudAccountGUID":"a1","reportGUID":"r1"},{"cloudAccountGUID":"a2","reportGUID":"r2"}],"total":{"value":3}}`)
+			case 2:
 				_, _ = io.WriteString(w, `{"response":[{"cloudAccountGUID":"a3","reportGUID":"r3"}],"total":{"value":3}}`)
 			default:
 				t.Errorf("unexpected accounts pageNum %v", pageNum)
@@ -160,10 +160,10 @@ func TestQueryCloudPosturePaginatesWhenTotalOmitted(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/cloudposture/accounts"):
 			pageNum, _ := reqBody["pageNum"].(float64)
 			accountsPages = append(accountsPages, int(pageNum))
-			switch int(pageNum) {
-			case 0: // full page (== pageSize 2), and NO "total" field
+			switch int(pageNum) { // the backend's pageNum is 1-based
+			case 1: // full page (== pageSize 2), and NO "total" field
 				_, _ = io.WriteString(w, `{"response":[{"reportGUID":"r1"},{"reportGUID":"r2"}]}`)
-			case 1: // short page -> last page
+			case 2: // short page -> last page
 				_, _ = io.WriteString(w, `{"response":[{"reportGUID":"r3"}]}`)
 			default:
 				t.Errorf("unexpected accounts pageNum %v", pageNum)
