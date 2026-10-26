@@ -115,3 +115,40 @@ func TestQueryWorkloadVulnerabilitiesBackendErrorFailsTheCall(t *testing.T) {
 		t.Fatal("a failed CVE call must fail the page, not return a silently short one")
 	}
 }
+
+func TestQueryWorkloadVulnerabilitiesCustomFieldsKeepName(t *testing.T) {
+	s, closeFn := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/workload/list") {
+			_, _ = io.WriteString(w, `{"response":[{"cluster":"c","namespace":"n","kind":"deployment","name":"w"}],"total":{"value":1}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"response":[{"name":"CVE-1","severity":"High","workloadsCount":9},{"name":"CVE-1","severity":"High"}],"total":{"value":2}}`)
+	})
+	defer closeFn()
+	out, err := s.queryWorkloadVulnerabilities(context.Background(), armo.Identity{CustomerGUID: "g", APIKey: "k"},
+		QueryWorkloadVulnInput{Fields: []string{"severity"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Count != 1 || out.Items[0]["name"] != "CVE-1" || out.Items[0]["severity"] != "High" {
+		t.Errorf("custom fields must keep name and dedupe on it: %+v", out.Items)
+	}
+}
+
+func TestQueryWorkloadVulnerabilitiesDefaultFieldsOmitAccountWideCount(t *testing.T) {
+	s, closeFn := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/workload/list") {
+			_, _ = io.WriteString(w, `{"response":[{"cluster":"c","namespace":"n","kind":"deployment","name":"w"}],"total":{"value":1}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"response":[{"name":"CVE-1","severity":"High","workloadsCount":9}],"total":{"value":1}}`)
+	})
+	defer closeFn()
+	out, err := s.queryWorkloadVulnerabilities(context.Background(), armo.Identity{CustomerGUID: "g", APIKey: "k"}, QueryWorkloadVulnInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, has := out.Items[0]["workloadsCount"]; has {
+		t.Errorf("workloadsCount is account-wide and must not be on a per-workload row: %+v", out.Items[0])
+	}
+}

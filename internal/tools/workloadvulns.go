@@ -22,7 +22,8 @@ const (
 	workloadVulnsConcurrency = 4
 )
 
-var workloadVulnFields = []string{"name", "id", "severity", "exploitable", "isRelevant", "epssInfo.epss", "workloadsCount"}
+// workloadsCount is left out: it is the account-wide number of workloads with the CVE, misleading on a per-workload row.
+var workloadVulnFields = []string{"name", "id", "severity", "exploitable", "isRelevant", "epssInfo.epss"}
 
 type QueryWorkloadVulnInput struct {
 	AccountInput
@@ -32,11 +33,11 @@ type QueryWorkloadVulnInput struct {
 	Workload    string   `json:"workload,omitempty" jsonschema:"only the workload with this name"`
 	Severity    string   `json:"severity,omitempty" jsonschema:"only CVEs of this severity: Critical, High, Medium, or Low"`
 	CVE         string   `json:"cve,omitempty" jsonschema:"only this CVE, for example CVE-2024-1234"`
-	InUse       *bool    `json:"in_use,omitempty" jsonschema:"true: only CVEs in packages loaded at runtime; false: only dormant ones"`
+	InUse       *bool    `json:"in_use,omitempty" jsonschema:"true: only CVEs whose package is loaded at runtime in some workload of the account; false: only the rest. Account-wide, not per-workload: a workload that never ran with relevancy data still matches when another workload loads the same package version"`
 	Exploitable *bool    `json:"exploitable,omitempty" jsonschema:"true: only CVEs that are known exploited (CISA KEV) or highly likely to be (EPSS 0.10 or more); false: only the rest"`
 	Page        int      `json:"page,omitempty" jsonschema:"1-based page number over workloads (default 1)"`
 	PageSize    int      `json:"page_size,omitempty" jsonschema:"workloads per page (default 10, max 25)"`
-	Fields      []string `json:"fields,omitempty" jsonschema:"dotted CVE field paths to include besides the workload columns; omit for the summary projection"`
+	Fields      []string `json:"fields,omitempty" jsonschema:"dotted CVE field paths to include besides the workload columns (name is always included); omit for the summary projection"`
 }
 
 // workloadRef is the part of a /vulnerability_v2/workload/list item that names a workload.
@@ -70,9 +71,10 @@ func (s *Server) queryWorkloadVulnerabilities(ctx context.Context, ident armo.Id
 		workloads = append(workloads, w)
 	}
 
-	fields := in.Fields
-	if len(fields) == 0 {
-		fields = workloadVulnFields
+	fields := workloadVulnFields
+	if len(in.Fields) > 0 {
+		// Always keep the CVE name: it identifies the row and drives the per-workload dedupe.
+		fields = append([]string{"name"}, in.Fields...)
 	}
 	perWorkload := make([][]map[string]any, len(workloads))
 	truncated := make([]bool, len(workloads))

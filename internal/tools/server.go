@@ -66,7 +66,7 @@ func (s *Server) Register(m *mcp.Server) {
 	}, s.QueryVulnerabilities)
 	mcp.AddTool(m, &mcp.Tool{
 		Name:        "query_workload_vulnerabilities",
-		Description: "List the CVEs of the caller's workloads, one row per workload and CVE. Read-only. Pages over workloads (default 10, max 25 per call), so a full export is a few calls: keep calling with the next page until you have covered total workloads. Supports workload scope (cluster, namespace, kind, workload) and CVE filters (severity, cve, in_use, exploitable).",
+		Description: "List the CVEs of the caller's workloads, one row per workload and CVE. Read-only. Pages over workloads (default 10, max 25 per call), so a full export is a few calls: keep calling with the next page until you have covered total workloads. Supports workload scope (cluster, namespace, kind, workload) and CVE filters (severity, cve, in_use, exploitable). Note: in_use and the isRelevant column are account-wide (the package is loaded in some workload), not per-workload.",
 	}, s.QueryWorkloadVulnerabilities)
 	mcp.AddTool(m, &mcp.Tool{
 		Name:        "query_posture",
