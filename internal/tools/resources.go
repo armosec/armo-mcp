@@ -23,7 +23,7 @@ const cheatsheetText = `# ARMO MCP field & enum cheatsheet
 
 ## Tools
 - query_vulnerabilities: filters "severity" (Critical/High/Medium/Low), "cve", "cluster", "namespace", "workload", "kind", "in_use" (true/false) and "exploitable" (true: known exploited or EPSS 0.10+). Workload filters list the CVEs of that workload.
-- query_workload_vulnerabilities: one row per workload and CVE. Same scope and CVE filters as query_vulnerabilities (cluster, namespace, kind, workload; severity, cve, in_use, exploitable). Pages over workloads: "page_size" is workloads (default 10, max 25) and "total" counts workloads. For a full export keep calling until you have covered total workloads.
+- query_workload_vulnerabilities: one row per workload and CVE. Same scope and CVE filters as query_vulnerabilities (cluster, namespace, kind, workload; severity, cve, in_use, exploitable). Pages over workloads: "page_size" is workloads (default 10, max 25) and "total" counts workloads. For a full export keep calling until you have covered total workloads. With "cve" set, the pages hold only the workloads that have that CVE, so "which workloads have CVE-X" is one call.
 - query_posture: filter "framework" (a compliance framework name)
 - query_incidents: filter "severity" (Critical/High/Medium/Low)
 - query_risks: filter "severity" (Critical/High/Medium/Low)
