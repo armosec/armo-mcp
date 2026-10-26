@@ -65,6 +65,10 @@ func (s *Server) Register(m *mcp.Server) {
 		Description: "Query the caller's ARMO CVE findings. Read-only. Supports filters for severity, CVE, in-use, exploitable and workload scope (cluster, namespace, workload, kind), paging, and field selection. To list the CVEs of each workload, take workloads from list_inventory and call this once per workload with in_use/exploitable set as needed.",
 	}, s.QueryVulnerabilities)
 	mcp.AddTool(m, &mcp.Tool{
+		Name:        "query_workload_vulnerabilities",
+		Description: "List the CVEs of the caller's workloads, one row per workload and CVE. Read-only. Pages over workloads (default 10, max 25 per call), so a full export is a few calls: keep calling with the next page until you have covered total workloads. Supports workload scope (cluster, namespace, kind, workload) and CVE filters (severity, cve, in_use, exploitable). Note: in_use and the isRelevant column are account-wide (the package is loaded in some workload), not per-workload.",
+	}, s.QueryWorkloadVulnerabilities)
+	mcp.AddTool(m, &mcp.Tool{
 		Name:        "query_posture",
 		Description: "Query the caller's ARMO Kubernetes posture controls. Read-only. Supports framework filter, paging, and field selection.",
 	}, s.QueryPosture)

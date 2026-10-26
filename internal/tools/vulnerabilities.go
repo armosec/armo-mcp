@@ -21,7 +21,7 @@ type QueryVulnInput struct {
 	Workload    string   `json:"workload,omitempty" jsonschema:"only CVEs found in the workload with this name"`
 	Kind        string   `json:"kind,omitempty" jsonschema:"only CVEs found in workloads of this kind, for example deployment or Deployment"`
 	CVE         string   `json:"cve,omitempty" jsonschema:"only this CVE, for example CVE-2024-1234"`
-	InUse       *bool    `json:"in_use,omitempty" jsonschema:"true: only CVEs in packages loaded at runtime; false: only dormant ones"`
+	InUse       *bool    `json:"in_use,omitempty" jsonschema:"true: only CVEs whose package is loaded at runtime in some workload of the account; false: only the rest. Account-wide, not per-workload: with a workload filter set, a CVE still counts as in use when another workload loads the same package version"`
 	Exploitable *bool    `json:"exploitable,omitempty" jsonschema:"true: only CVEs that are known exploited (CISA KEV) or highly likely to be (EPSS 0.10 or more); false: only the rest"`
 	Page        int      `json:"page,omitempty" jsonschema:"1-based page number (default 1)"`
 	PageSize    int      `json:"page_size,omitempty" jsonschema:"items per page (default 25, max 100)"`

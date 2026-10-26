@@ -141,12 +141,13 @@ Step-by-step notes for each client, including what has been tested end to end, a
 
 ## Tools
 
-All twelve tools are read-only queries. Data tools page their results, let the assistant
+All thirteen tools are read-only queries. Data tools page their results, let the assistant
 pick only the fields it needs, and take an optional `account`.
 
 | Tool | Returns |
 |---|---|
 | `query_vulnerabilities` | CVE findings, filtered by severity, CVE, in use, exploitable, cluster, namespace or workload |
+| `query_workload_vulnerabilities` | the CVEs of each workload, one row per workload and CVE, paged over workloads |
 | `query_images` | container images with vulnerability counts |
 | `query_posture` | Kubernetes posture controls, by framework |
 | `query_cloud_posture` | cloud misconfiguration findings (CSPM) |
