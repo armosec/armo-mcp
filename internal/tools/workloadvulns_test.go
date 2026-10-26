@@ -52,12 +52,12 @@ func TestQueryWorkloadVulnerabilitiesFlattensPerWorkload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// workload list: cluster and lowercased kind filters, page 2 (0-based 1), size clamped to the max
+	// workload list: cluster and lowercased kind filters, page 2 (the backend's pageNum is 1-based), size clamped to the max, stable order
 	wf := wlBody["innerFilters"].([]any)[0].(map[string]any)
 	if wf["cluster"] != "c1" || wf["kind"] != "deployment" || len(wf) != 2 {
 		t.Errorf("workload filter = %v", wf)
 	}
-	if wlBody["pageNum"] != float64(1) || wlBody["pageSize"] != float64(workloadVulnsMaxPageSize) {
+	if wlBody["pageNum"] != float64(2) || wlBody["orderBy"] != "resourceHash:asc" || wlBody["pageSize"] != float64(workloadVulnsMaxPageSize) {
 		t.Errorf("paging = %v / %v", wlBody["pageNum"], wlBody["pageSize"])
 	}
 	// each workload gets its own scoped CVE call with the CVE filters

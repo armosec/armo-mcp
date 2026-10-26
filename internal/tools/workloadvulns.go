@@ -52,7 +52,8 @@ type workloadRef struct {
 func (s *Server) queryWorkloadVulnerabilities(ctx context.Context, ident armo.Identity, in QueryWorkloadVulnInput) (QueryResult, error) {
 	pageNum, pageSize := shape.ClampPage(in.Page, in.PageSize, workloadVulnsDefaultSize, workloadVulnsMaxPageSize)
 
-	wlReq := armo.ListRequest{Path: "/vulnerability_v2/workload/list", PageNum: pageNum, PageSize: pageSize}
+	// The backend's default order is unstable across pages (workloads repeat or go missing), so sort on the unique key.
+	wlReq := armo.ListRequest{Path: "/vulnerability_v2/workload/list", PageNum: pageNum, PageSize: pageSize, Extra: map[string]any{"orderBy": "resourceHash:asc"}}
 	if f := workloadFilter(in); len(f) > 0 {
 		wlReq.InnerFilters = []map[string]any{f}
 	}
