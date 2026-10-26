@@ -155,7 +155,10 @@ func workloadFilter(in QueryWorkloadVulnInput) map[string]any {
 		"cluster":   in.Cluster,
 		"namespace": in.Namespace,
 		"kind":      strings.ToLower(in.Kind),
-		"workload":  in.Workload, // the list filters on "workload"; its "name" key matches nothing
+		"workload":  in.Workload, // the list filters on "workload"; its "name" key is the CVE name
+		// The workload list joins the CVE table, so with a CVE set the page holds only workloads
+		// that have it and the fan-out skips the rest (measured on dev: CVE-2024-1086 -> 2 of 184 workloads).
+		"cveName": in.CVE,
 	} {
 		if v != "" {
 			f[k] = v

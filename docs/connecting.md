@@ -166,7 +166,7 @@ Thirteen tools, all read-only, all scoped to the ARMO accounts you belong to.
 | Tool | What it returns |
 |---|---|
 | `query_vulnerabilities` | CVE findings, filterable by severity, CVE, in-use, exploitable and workload scope (cluster, namespace, workload, kind) |
-| `query_workload_vulnerabilities` | the CVEs of each workload, one row per workload and CVE, with the same CVE filters |
+| `query_workload_vulnerabilities` | the CVEs of each workload, one row per workload and CVE, with the same CVE filters; with `cve` set, only the workloads that have that CVE (still paged, 25 workloads per call, so follow `total`) |
 | `query_images` | container images with vulnerability rollups |
 | `query_posture` | Kubernetes posture controls, filterable by framework |
 | `query_cloud_posture` | cloud misconfiguration controls (CSPM) |
