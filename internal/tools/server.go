@@ -39,13 +39,19 @@ type Server struct {
 // resolveIdentity extracts the caller's identity for a tool call. It reads the
 // request's HTTP headers when present (HTTP transport) and tolerates their
 // absence (stdio transport, where GetExtra() and its Header are nil) — the
-// configured Authenticator decides what to do with a nil header set.
+// configured Authenticator decides what to do with a nil header set. The
+// caller's User-Agent, if any, is kept so the client can forward it.
 func (s *Server) resolveIdentity(req *mcp.CallToolRequest) (armo.Identity, error) {
 	var h http.Header
 	if ex := req.GetExtra(); ex != nil {
 		h = ex.Header
 	}
-	return s.Auth.Resolve(h)
+	ident, err := s.Auth.Resolve(h)
+	if err != nil {
+		return ident, err
+	}
+	ident.ClientUA = h.Get("User-Agent")
+	return ident, nil
 }
 
 type QueryResult struct {
