@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -34,6 +35,10 @@ var errClientRequest = errors.New("client request error")
 // this via errors.Is without matching on error strings.
 var ErrBackendUnavailable = errors.New("backend unavailable")
 
+// ErrDisabledForAccount is returned when an account administrator has turned
+// MCP access off for the account. Its message is shown to the user as is.
+var ErrDisabledForAccount = errors.New("MCP access is turned off for this account by an administrator")
+
 type Client struct {
 	baseURL string
 	http    *http.Client
@@ -54,7 +59,8 @@ func New(baseURL string, httpClient *http.Client) *Client {
 			// Only transport errors and 5xx responses indicate an unhealthy
 			// backend and should trip the breaker. A success, an auth failure
 			// (401/403) or any other 4xx client-request error must not.
-			return err == nil || errors.Is(err, errAuthFailure) || errors.Is(err, errClientRequest)
+			return err == nil || errors.Is(err, errAuthFailure) || errors.Is(err, ErrDisabledForAccount) ||
+				errors.Is(err, errClientRequest)
 		},
 	})
 	return &Client{baseURL: baseURL, http: httpClient, breaker: breaker}
@@ -121,6 +127,9 @@ func (c *Client) List(ctx context.Context, ident Identity, req ListRequest) (*Li
 		} else {
 			httpReq.Header.Set("x-api-key", ident.APIKey)
 		}
+		if ua := cleanClientUA(ident.ClientUA); ua != "" {
+			httpReq.Header.Set("X-MCP-Client", ua)
+		}
 		httpReq.Header.Set("content-type", "application/json")
 		httpReq.Header.Set("accept", "application/json")
 
@@ -131,7 +140,7 @@ func (c *Client) List(ctx context.Context, ident Identity, req ListRequest) (*Li
 		}
 		defer func() { _ = res.Body.Close() }()
 
-		if err := statusError(res.StatusCode); err != nil {
+		if err := responseError(res); err != nil {
 			return nil, err
 		}
 
@@ -172,6 +181,43 @@ func (c *Client) List(ctx context.Context, ident Identity, req ListRequest) (*Li
 		return nil, breakerError(err)
 	}
 	return result.(*ListResponse), nil
+}
+
+// maxClientUALen caps the forwarded User-Agent.
+const maxClientUALen = 128
+
+// cleanClientUA keeps only printable ASCII from a caller-supplied User-Agent,
+// trims it and caps its length, so it is safe to send on as a header value.
+func cleanClientUA(ua string) string {
+	b := make([]byte, 0, len(ua))
+	for i := 0; i < len(ua); i++ {
+		if ua[i] >= 0x20 && ua[i] <= 0x7e {
+			b = append(b, ua[i])
+		}
+	}
+	out := strings.TrimSpace(string(b))
+	if len(out) > maxClientUALen {
+		out = strings.TrimSpace(out[:maxClientUALen])
+	}
+	return out
+}
+
+// maxErrorBodyBytes bounds how much of a 403 body is read to find its error code.
+const maxErrorBodyBytes = 4 << 10
+
+// responseError is statusError plus the one 403 the body tells apart: an
+// account whose administrator turned MCP access off.
+func responseError(res *http.Response) error {
+	if res.StatusCode == http.StatusForbidden {
+		var body struct {
+			Error string `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(res.Body, maxErrorBodyBytes)).Decode(&body) == nil &&
+			body.Error == "mcp_disabled_for_account" {
+			return ErrDisabledForAccount
+		}
+	}
+	return statusError(res.StatusCode)
 }
 
 // statusError classifies a non-2xx status so the breaker counts only backend

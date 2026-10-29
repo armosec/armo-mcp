@@ -235,6 +235,10 @@ URL has to be reachable from the public internet. If your ARMO instance sits beh
 VPN or an allow-list, Claude Code on your own machine works where Claude Desktop will
 not.
 
+**"MCP access is turned off for this account by an administrator".**
+An admin of your ARMO account has turned MCP access off for that account. Ask them
+to turn it back on.
+
 **Sign-in succeeds but tools fail.**
 Your ARMO role may not permit the data you are asking for. Read-only accounts can read
 everything these tools expose, so this usually means the account is not in the

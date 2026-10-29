@@ -34,7 +34,7 @@ func (c *Client) Accounts(ctx context.Context, bearer string) ([]Account, error)
 		return nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
-	if err := statusError(res.StatusCode); err != nil {
+	if err := responseError(res); err != nil {
 		return nil, err
 	}
 	var out []Account

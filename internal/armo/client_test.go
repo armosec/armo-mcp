@@ -3,6 +3,7 @@ package armo
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -320,5 +321,101 @@ func TestClientCustomerGUIDComesOnlyFromIdentity(t *testing.T) {
 	}
 	if v := gotQuery["customerGUID"]; len(v) != 1 || v[0] != "tenant-a" {
 		t.Errorf("customerGUID = %v, want exactly [tenant-a]", v)
+	}
+}
+
+func TestClientForwardsCleanedUserAgent(t *testing.T) {
+	srv, headers := captureHeaders(t)
+	listAs(t, srv, Identity{CustomerGUID: "g", Bearer: "tok",
+		ClientUA: "  claude-code/2.0 \x07(darwin)\n" + strings.Repeat("x", 300)})
+
+	got := headers().Get("X-MCP-Client")
+	if !strings.HasPrefix(got, "claude-code/2.0 (darwin)xxx") {
+		t.Errorf("X-MCP-Client = %q, want the control characters and outer spaces removed", got)
+	}
+	if len(got) != 128 {
+		t.Errorf("len(X-MCP-Client) = %d, want 128", len(got))
+	}
+}
+
+func TestClientForwardsUserAgentUnchanged(t *testing.T) {
+	srv, headers := captureHeaders(t)
+	listAs(t, srv, Identity{CustomerGUID: "g", Bearer: "tok", ClientUA: "claude-code/2.0 (darwin)"})
+	if got := headers().Get("X-MCP-Client"); got != "claude-code/2.0 (darwin)" {
+		t.Errorf("X-MCP-Client = %q, want %q", got, "claude-code/2.0 (darwin)")
+	}
+}
+
+func TestClientOmitsHeaderWhenNoUserAgent(t *testing.T) {
+	for _, ua := range []string{"", " \x01\t "} {
+		srv, headers := captureHeaders(t)
+		listAs(t, srv, Identity{CustomerGUID: "g", Bearer: "tok", ClientUA: ua})
+		if _, ok := headers()["X-Mcp-Client"]; ok {
+			t.Errorf("ClientUA %q: X-MCP-Client sent as %q, want no header", ua, headers().Get("X-MCP-Client"))
+		}
+	}
+}
+
+func forbiddenServer(t *testing.T, body string, hits *int32) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits != nil {
+			atomic.AddInt32(hits, 1)
+		}
+		w.Header().Set("content-type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestDisabledForAccountMessage(t *testing.T) {
+	ident := Identity{CustomerGUID: "g", Bearer: "tok"}
+
+	c := New(forbiddenServer(t, `{"error":"mcp_disabled_for_account"}`, nil).URL, nil)
+	_, err := c.List(context.Background(), ident, ListRequest{Path: "/x"})
+	if !errors.Is(err, ErrDisabledForAccount) {
+		t.Fatalf("err = %v, want ErrDisabledForAccount", err)
+	}
+	if want := "MCP access is turned off for this account by an administrator"; err.Error() != want {
+		t.Errorf("err = %q, want %q", err.Error(), want)
+	}
+
+	c = New(forbiddenServer(t, `{"message":"forbidden"}`, nil).URL, nil)
+	_, err = c.List(context.Background(), ident, ListRequest{Path: "/x"})
+	if errors.Is(err, ErrDisabledForAccount) {
+		t.Fatalf("plain 403: err = %v, want the unauthorized error, not ErrDisabledForAccount", err)
+	}
+	if err == nil || err.Error() != "unauthorized: backend returned 403" {
+		t.Errorf("plain 403: err = %v, want %q", err, "unauthorized: backend returned 403")
+	}
+}
+
+func TestAccountsDisabledForAccount(t *testing.T) {
+	c := New(forbiddenServer(t, `{"error":"mcp_disabled_for_account"}`, nil).URL, nil)
+	if _, err := c.Accounts(context.Background(), "tok"); !errors.Is(err, ErrDisabledForAccount) {
+		t.Fatalf("err = %v, want ErrDisabledForAccount", err)
+	}
+}
+
+// Disabled-account 403s are an account setting, not backend health, so they
+// must never open the breaker shared by every tenant.
+func TestListCircuitStaysClosedOnDisabledForAccount(t *testing.T) {
+	var hits int32
+	c := New(forbiddenServer(t, `{"error":"mcp_disabled_for_account"}`, &hits).URL, nil)
+	ident := Identity{CustomerGUID: "g", Bearer: "tok"}
+
+	for i := 0; i < 10; i++ {
+		_, _ = c.List(context.Background(), ident, ListRequest{Path: "/x"})
+	}
+	before := atomic.LoadInt32(&hits)
+
+	_, err := c.List(context.Background(), ident, ListRequest{Path: "/x"})
+	if !errors.Is(err, ErrDisabledForAccount) {
+		t.Fatalf("err = %v, want ErrDisabledForAccount (breaker must stay closed)", err)
+	}
+	if got := atomic.LoadInt32(&hits); got != before+1 {
+		t.Errorf("hits = %d, want %d: the request should have reached the server", got, before+1)
 	}
 }

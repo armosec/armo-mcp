@@ -10,6 +10,10 @@ type Identity struct {
 	// Tenants are the accounts the token's tenantIds claim lists, besides
 	// CustomerGUID. The backend accepts a request for any of them.
 	Tenants []string
+	// ClientUA is the calling assistant's User-Agent, forwarded to the backend
+	// as X-MCP-Client so it can tell which client made the call. Empty when
+	// the transport has no headers.
+	ClientUA string
 }
 
 // Account is one ARMO account (Frontegg tenant) the caller belongs to.
