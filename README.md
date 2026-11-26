@@ -141,7 +141,7 @@ Step-by-step notes for each client, including what has been tested end to end, a
 
 ## Tools
 
-All thirteen tools are read-only queries. Data tools page their results, let the assistant
+All fourteen tools are read-only queries. Data tools page their results, let the assistant
 pick only the fields it needs, and take an optional `account`.
 
 | Tool | Returns |
@@ -159,6 +159,16 @@ pick only the fields it needs, and take an optional `account`.
 | `list_inventory` | workloads and cloud resources |
 | `list_repositories` | connected repositories and their IaC posture |
 | `list_accounts` | the ARMO accounts you can query |
+| `show_security_brief` | CVE counts by severity and the number of incidents, attack paths and risks; opens the [security brief view](docs/security-brief-view.md) in clients that support MCP Apps |
+
+### Security brief view
+
+`show_security_brief` is also an [MCP App](https://claude.com/docs/connectors/building/mcp-apps/getting-started):
+in a client that supports MCP Apps, such as Claude on the web or Claude Desktop, asking
+"show my ARMO security brief" opens an interactive view with a severity bar, a filterable
+CVE table, runtime incidents, attack paths and security risks. Other clients get the
+counts as an ordinary tool result. The view is a proof of concept; what has and has not
+been tested is in [docs/security-brief-view.md](docs/security-brief-view.md).
 
 ## Security and privacy
 

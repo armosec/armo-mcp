@@ -21,7 +21,7 @@ All configuration is environment variables. Defaults in brackets.
 | `ARMO_OAUTH_ENABLED` | turn on the OAuth path [`false`] |
 | `ARMO_OAUTH_ISSUER` | the Frontegg issuer for this environment, no default |
 | `ARMO_OAUTH_CLIENT_ID` | the audience tokens must carry, no default |
-| `ARMO_MCP_RESOURCE_URL` | this server's public URL, path exactly `/mcp`, no default |
+| `ARMO_MCP_RESOURCE_URL` | this server's public URL, path exactly `/mcp`, no default. Also the input to the [security brief view](security-brief-view.md)'s `_meta.ui.domain` |
 
 ### Why the OAuth settings have no defaults
 

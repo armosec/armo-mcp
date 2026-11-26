@@ -161,7 +161,7 @@ Ask ARMO support for the one for your region; there is no client secret.
 
 ## What it can access
 
-Thirteen tools, all read-only, all scoped to the ARMO accounts you belong to.
+Fourteen tools, all read-only, all scoped to the ARMO accounts you belong to.
 
 | Tool | What it returns |
 |---|---|
@@ -178,6 +178,7 @@ Thirteen tools, all read-only, all scoped to the ARMO accounts you belong to.
 | `list_inventory` | workloads and cloud resources |
 | `list_repositories` | connected repositories with IaC posture |
 | `list_accounts` | the ARMO accounts you can query, by name and GUID |
+| `show_security_brief` | CVE counts by severity and the number of runtime incidents, attack paths and security risks; in a client that supports MCP Apps it opens the [security brief view](security-brief-view.md) |
 
 All the data tools support paging and field selection, so your assistant can request a
 narrow slice instead of pulling everything. Each result names the account it came from,
@@ -202,7 +203,7 @@ account stays read-only there even if you are an admin elsewhere.
 The list of accounts is fixed when you sign in. If you are added to an account
 afterwards, sign in to the connector again to use it.
 
-**Nothing can be written.** The thirteen tools above are the entire surface. The server
+**Nothing can be written.** The fourteen tools above are the entire surface. The server
 cannot reach any other part of the ARMO API, and that limit is enforced by ARMO's
 backend rather than by the assistant.
 
