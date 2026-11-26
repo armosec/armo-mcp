@@ -25,7 +25,7 @@ var wantTools = []string{
 	"query_vulnerabilities", "query_posture", "query_incidents", "query_risks",
 	"query_images", "list_inventory", "list_repositories", "query_attack_chains",
 	"list_cloud_accounts", "query_cloud_posture", "query_cloud_compliance",
-	"list_accounts", "query_workload_vulnerabilities",
+	"list_accounts", "query_workload_vulnerabilities", "show_security_brief",
 }
 
 type config struct {

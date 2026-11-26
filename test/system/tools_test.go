@@ -18,8 +18,8 @@ func TestAllToolsReturnValidEnvelope(t *testing.T) {
 		name := name
 		t.Run(name, func(t *testing.T) {
 			args := map[string]any{"page": 1, "page_size": 2}
-			if name == "list_accounts" {
-				args = map[string]any{} // takes no parameters
+			if name == "list_accounts" || name == "show_security_brief" {
+				args = map[string]any{} // takes no paging parameters
 			}
 			res := callTool(t, s, name, args)
 			if res.IsError {

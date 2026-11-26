@@ -118,5 +118,6 @@ func (s *Server) Register(m *mcp.Server) {
 		Name:        "list_accounts",
 		Description: "List the ARMO accounts the caller can query, with each account's name and customerGUID; active marks the account signed in to, which tools use by default. Pass a name or customerGUID as another tool's account parameter to query that account. Read-only.",
 	}, s.ListAccounts)
+	s.registerSecurityBrief(m)
 	s.registerResources(m)
 }

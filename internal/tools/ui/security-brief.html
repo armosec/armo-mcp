@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>ARMO Security Brief</title>
+<!--
+  MCP App view for the show_security_brief tool, served as ui://armo/security-brief.
+  One self-contained file, no build step: the server embeds it and returns it as is.
+  It talks only to the host (postMessage), which proxies tool calls to this server.
+-->
+<style>
+/* Layout: one scannable console column. Counts first, then the CVE table with its filters, then three short lists. */
+:root {
+  --bg: #F9FAFD; --surface: #FFFFFF; --surface-alt: #F6F8FB; --hover: #F2F3F8;
+  --border: #E7E9F2; --fg: #1D1D23; --muted: #6B6F7E; --label: #5E6FA8;
+  --primary: #053CA1; --primary-hover: #063487; --on-primary: #FFFFFF; --focus: rgba(0,132,255,.4);
+  --crit-fg: #6B0047; --crit-bg: #FFE8F3; --crit-dot: #6B0047;
+  --high-fg: #B80000; --high-bg: #FFE7E7; --high-dot: #FF0000;
+  --med-fg: #8F5200;  --med-bg: #FFEFD9;  --med-dot: #FB9000;
+  --low-fg: #6E5800;  --low-bg: #FFF8DC;  --low-dot: #FFCE17;
+  --ok-fg: #036B3A;   --ok-bg: #E0FFE3;
+  --info-fg: #0B1E66; --info-bg: #E6ECF6; --info-border: #C6D5F0;
+  --shadow: 0 1px 3px rgba(18,42,131,.10), 0 1px 2px rgba(18,42,131,.06);
+  --font: var(--font-sans, "Open Sans", "Helvetica Neue", Arial, sans-serif);
+  --mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0B1022; --surface: #131A33; --surface-alt: #18203E; --hover: #1D2749;
+  --border: #27325C; --fg: #E9ECF8; --muted: #9BA5C6; --label: #8CA5D4;
+  --primary: #7FAAFF; --primary-hover: #9BBCFF; --on-primary: #0B1022; --focus: rgba(127,170,255,.45);
+  --crit-fg: #FF9CCB; --crit-bg: #3A0F2B; --crit-dot: #E0409A;
+  --high-fg: #FF9A9A; --high-bg: #3B1416; --high-dot: #FF4D4D;
+  --med-fg: #FFC680;  --med-bg: #38260D;  --med-dot: #FB9000;
+  --low-fg: #FFE28A;  --low-bg: #332B0C;  --low-dot: #FFCE17;
+  --ok-fg: #7FE0A8;   --ok-bg: #0E2E20;
+  --info-fg: #C9D8FF; --info-bg: #18244D; --info-border: #2C3F7A;
+  --shadow: 0 1px 3px rgba(0,0,0,.35);
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0B1022; --surface: #131A33; --surface-alt: #18203E; --hover: #1D2749;
+  --border: #27325C; --fg: #E9ECF8; --muted: #9BA5C6; --label: #8CA5D4;
+  --primary: #7FAAFF; --primary-hover: #9BBCFF; --on-primary: #0B1022; --focus: rgba(127,170,255,.45);
+  --crit-fg: #FF9CCB; --crit-bg: #3A0F2B; --crit-dot: #E0409A;
+  --high-fg: #FF9A9A; --high-bg: #3B1416; --high-dot: #FF4D4D;
+  --med-fg: #FFC680;  --med-bg: #38260D;  --med-dot: #FB9000;
+  --low-fg: #FFE28A;  --low-bg: #332B0C;  --low-dot: #FFCE17;
+  --ok-fg: #7FE0A8;   --ok-bg: #0E2E20;
+  --info-fg: #C9D8FF; --info-bg: #18244D; --info-border: #2C3F7A;
+  --shadow: 0 1px 3px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; line-height: 20px;
+  padding-block: 16px 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); -webkit-font-smoothing: antialiased; }
+.page { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-size: 24px; line-height: 32px; font-weight: 700; margin: 0; text-wrap: balance; }
+h2 { font-size: 16px; line-height: 24px; font-weight: 700; margin: 0; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.brand { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; min-width: 0; }
+.brand svg { width: 32px; height: 32px; flex: none; color: var(--primary); }
+.sub { color: var(--muted); font-size: 12px; line-height: 18px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+button, select { font: inherit; }
+.btn { border: 1px solid var(--border); background: var(--surface); color: var(--fg); border-radius: 6px; padding: 6px 12px; font-weight: 600; cursor: pointer; transition: background 120ms; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.btn.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.btn:disabled { opacity: .5; cursor: default; }
+select { border: 1px solid var(--border); background: var(--surface); color: var(--fg); border-radius: 6px; padding: 6px 8px; max-width: 100%; }
+.btn:focus-visible, select:focus-visible, .chip:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--focus); }
+.banner { background: var(--info-bg); border: 1px solid var(--info-border); color: var(--info-fg); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+.banner strong { font-weight: 700; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.kpi .n { font-size: 30px; line-height: 38px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--label); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chip { border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 4px 12px; font-weight: 600; font-size: 12px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.chip[aria-pressed="true"]::before { content: "✓ "; }
+.sevbar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--surface-alt); gap: 2px; }
+.sevbar span { min-width: 3px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--muted); }
+.legend b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 620px; }
+th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: var(--surface-alt); padding: 8px 12px; white-space: nowrap; }
+td { padding: 10px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.id { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--surface-alt); color: var(--muted); }
+.pill.critical { background: var(--crit-bg); color: var(--crit-fg); } .pill.critical .dot, .c-critical { background: var(--crit-dot); }
+.pill.high { background: var(--high-bg); color: var(--high-fg); }     .pill.high .dot, .c-high { background: var(--high-dot); }
+.pill.medium { background: var(--med-bg); color: var(--med-fg); }     .pill.medium .dot, .c-medium { background: var(--med-dot); }
+.pill.low { background: var(--low-bg); color: var(--low-fg); }        .pill.low .dot, .c-low { background: var(--low-dot); }
+.pill.ok { background: var(--ok-bg); color: var(--ok-fg); }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.list { display: flex; flex-direction: column; }
+.item { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-top: 1px solid var(--border); min-width: 0; }
+.item:first-child { border-top: 0; padding-top: 0; }
+.item .t { font-weight: 600; overflow-wrap: anywhere; }
+.item .m { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--muted); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.state { color: var(--muted); font-size: 13px; padding: 4px 0; }
+.state.err { color: var(--high-fg); }
+.foot { color: var(--muted); font-size: 12px; line-height: 18px; }
+@media (max-width: 860px) { .trio { grid-template-columns: minmax(0, 1fr); } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 50 50" aria-hidden="true"><path fill="currentColor" d="M32.38 5c.29 0 .55.19.64.46l12.58 36.19a.63.63 0 0 1-.1.58.7.7 0 0 1-.54.27H5.05a.7.7 0 0 1-.55-.27.63.63 0 0 1-.1-.57L16.64 5.45a.67.67 0 0 1 .64-.45h15.1Zm-7.14 7.7h-.97a.67.67 0 0 0-.64.46l-6.67 20.7a.64.64 0 0 0 .13.54c.12.15.31.25.52.25h14.49c.2 0 .39-.1.52-.25a.64.64 0 0 0 .12-.55l-6.86-20.7a.67.67 0 0 0-.64-.45Z"/></svg>
+      <div>
+        <h1>Security brief</h1>
+        <div class="sub" id="freshness">Connecting to ARMO</div>
+      </div>
+    </div>
+    <div class="controls">
+      <label class="sub" for="account">Account</label>
+      <select id="account" disabled><option>Signed-in account</option></select>
+      <button class="btn" id="refresh" type="button" disabled>Refresh</button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" hidden>
+    <strong id="banner-title"></strong>
+    <span id="banner-text"></span>
+  </div>
+
+  <section class="kpis" aria-label="Totals">
+    <div class="kpi"><span class="eyebrow">Critical CVEs</span><span class="n" id="k-crit">–</span><span class="sub">across all workloads</span></div>
+    <div class="kpi"><span class="eyebrow">Runtime incidents</span><span class="n" id="k-inc">–</span><span class="sub">all severities</span></div>
+    <div class="kpi"><span class="eyebrow">Attack paths</span><span class="n" id="k-chain">–</span><span class="sub">toward sensitive assets</span></div>
+    <div class="kpi"><span class="eyebrow">Security risks</span><span class="n" id="k-risk">–</span><span class="sub">prioritized by ARMO</span></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Vulnerabilities</h2>
+      <div class="filters">
+        <label class="sub" for="sev">Severity</label>
+        <select id="sev">
+          <option value="">All</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+        </select>
+        <button class="chip" id="f-inuse" type="button" aria-pressed="false">In use</button>
+        <button class="chip" id="f-expl" type="button" aria-pressed="false">Exploitable</button>
+      </div>
+    </div>
+    <div class="sevbar" id="sevbar" role="img" aria-label="CVE findings by severity"></div>
+    <div class="legend" id="legend"></div>
+    <div id="vuln-body"><div class="state">Loading CVE findings</div></div>
+  </section>
+
+  <div class="trio">
+    <section class="card"><h2>Runtime incidents</h2><div id="inc-body"><div class="state">Loading incidents</div></div></section>
+    <section class="card"><h2>Attack paths</h2><div id="chain-body"><div class="state">Loading attack paths</div></div></section>
+    <section class="card"><h2>Security risks</h2><div id="risk-body"><div class="state">Loading risks</div></div></section>
+  </div>
+
+  <section class="card" id="brief-card">
+    <div class="card-head">
+      <h2>What to fix first</h2>
+      <button class="btn primary" id="brief-btn" type="button" disabled>Ask Claude</button>
+    </div>
+    <div class="state" id="brief-out">Sends a message to this chat asking Claude to name the three things to fix first.</div>
+  </section>
+
+  <p class="foot">Every number comes from the ARMO MCP server, queried as you. This view stores nothing.</p>
+</div>
+
+<script type="module">
+// The MCP Apps client. The version is pinned; the origin must match the
+// resourceDomains entry the server sets on this resource (extAppsScriptOrigin).
+import { App } from "https://unpkg.com/@modelcontextprotocol/ext-apps@1.7.5/dist/src/app-with-deps.js";
+
+const SEVS = ["Critical", "High", "Medium", "Low"];
+const app = new App({ name: "ARMO Security Brief", version: "1.0.0" });
+let connected = false, started = false, account = "", acctGuid = "", loaded = {}, runId = 0, initial = null;
+const $ = (id) => document.getElementById(id);
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined && text !== null) n.textContent = String(text);
+  return n;
+}
+function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); return n; }
+function fmt(n) { return typeof n === "number" ? n.toLocaleString() : "–"; }
+function when(v) {
+  if (!v) return "";
+  const d = new Date(v);
+  return isNaN(d) ? String(v) : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function sevPill(sev) {
+  const s = String(sev || "Unknown"), p = el("span", "pill " + s.toLowerCase());
+  p.appendChild(el("span", "dot")); p.appendChild(document.createTextNode(s));
+  return p;
+}
+function state(body, text, isErr) { clear(body).appendChild(el("div", "state" + (isErr ? " err" : ""), text)); }
+function banner(title, text) {
+  $("banner").hidden = !title;
+  $("banner-title").textContent = title || "";
+  $("banner-text").textContent = text || "";
+}
+function errorCopy(e) { return "ARMO returned an error: " + ((e && e.message) || "unknown"); }
+function pressed(id) { return $(id).getAttribute("aria-pressed") === "true"; }
+
+// One read of a server tool, through the host. Every tool returns the same
+// envelope (total, page, page_size, count, items, account) as structuredContent.
+async function call(tool, input) {
+  const args = {};
+  Object.keys(input || {}).forEach((k) => { if (input[k] !== "" && input[k] !== undefined) args[k] = input[k]; });
+  if (account) args.account = account;
+  return envelope(await app.callServerTool({ name: tool, arguments: args }));
+}
+function envelope(result) {
+  const text = ((result && result.content) || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
+  if (!result || result.isError) throw new Error(text || "the tool call failed");
+  if (result.structuredContent) return result.structuredContent;
+  try { return JSON.parse(text); } catch (e) { return {}; }
+}
+function rows(p) { return Array.isArray(p.items) ? p.items : []; }
+function noteAccount(p) { if (p.account && p.account.customerGUID) acctGuid = String(p.account.customerGUID); }
+
+// ---------- renderers ----------
+// The summary is show_security_brief's result: one row per section, with a total.
+function renderSummary(p) {
+  const counts = {}, totals = {};
+  rows(p).forEach((r) => {
+    if (r.section === "vulnerabilities") counts[r.severity] = r.total; else totals[r.section] = r.total;
+  });
+  const bar = clear($("sevbar")), legend = clear($("legend"));
+  const total = SEVS.reduce((a, s) => a + (counts[s] || 0), 0);
+  SEVS.forEach((s) => {
+    const n = counts[s];
+    if (typeof n === "number" && n > 0 && total > 0) {
+      const seg = el("span", "c-" + s.toLowerCase());
+      seg.style.flex = String(n) + " 1 0";
+      bar.appendChild(seg);
+    }
+    const item = el("span");
+    item.appendChild(el("span", "dot c-" + s.toLowerCase()));
+    item.appendChild(document.createTextNode(s + " "));
+    item.appendChild(el("b", "", fmt(n)));
+    legend.appendChild(item);
+  });
+  $("k-crit").textContent = fmt(counts.Critical);
+  $("k-inc").textContent = fmt(totals.incidents);
+  $("k-chain").textContent = fmt(totals.attack_chains);
+  $("k-risk").textContent = fmt(totals.risks);
+  banner(p.note ? "Partial data" : "", p.note);
+}
+
+function renderVulns(p) {
+  const body = $("vuln-body"), list = rows(p);
+  if (!list.length) {
+    const on = [];
+    if ($("sev").value) on.push($("sev").value + " severity");
+    if (pressed("f-inuse")) on.push("in use");
+    if (pressed("f-expl")) on.push("exploitable");
+    return state(body, on.length ? "No CVE findings match: " + on.join(" + ") + ". Turn a filter off to see more." : "No CVE findings in this account.");
+  }
+  const wrap = el("div", "scroll"), t = el("table"), hr = el("tr");
+  [["CVE"], ["Severity"], ["Score", 1], ["Exploitable"], ["In use"], ["EPSS", 1], ["Workloads", 1]].forEach((h) => {
+    hr.appendChild(el("th", h[1] ? "num" : "", h[0]));
+  });
+  const thead = el("thead"); thead.appendChild(hr); t.appendChild(thead);
+  const tb = el("tbody");
+  list.forEach((v) => {
+    const tr = el("tr"), epss = v.epssInfo && typeof v.epssInfo.epss === "number" ? (v.epssInfo.epss * 100).toFixed(1) + "%" : "–";
+    const c1 = el("td"); c1.appendChild(el("span", "id", v.name || v.id || "–")); tr.appendChild(c1);
+    const c2 = el("td"); c2.appendChild(sevPill(v.severity)); tr.appendChild(c2);
+    tr.appendChild(el("td", "num", typeof v.severityScore === "number" ? v.severityScore.toFixed(1) : "–"));
+    tr.appendChild(el("td", "", v.exploitable === undefined ? "–" : v.exploitable));
+    tr.appendChild(el("td", "", v.isRelevant === undefined ? "–" : v.isRelevant));
+    tr.appendChild(el("td", "num", epss));
+    tr.appendChild(el("td", "num", fmt(v.workloadsCount)));
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb); wrap.appendChild(t);
+  clear(body).appendChild(wrap);
+  body.appendChild(el("div", "sub", "Showing " + list.length + " of " + fmt(p.total) + " matching findings"));
+}
+
+function renderList(body, p, empty, make) {
+  const list = rows(p);
+  if (!list.length) return state(body, empty);
+  const box = el("div", "list");
+  list.forEach((r) => {
+    const parts = make(r), item = el("div", "item"), meta = el("div", "m");
+    item.appendChild(el("div", "t", parts.title || "Untitled"));
+    (parts.meta || []).forEach((m) => { if (m) meta.appendChild(typeof m === "string" ? el("span", "", m) : m); });
+    item.appendChild(meta); box.appendChild(item);
+  });
+  clear(body).appendChild(box);
+  if (typeof p.total === "number" && p.total > list.length) body.appendChild(el("div", "sub", "Showing " + list.length + " of " + fmt(p.total)));
+}
+const renderInc = (p) => renderList($("inc-body"), p, "No runtime incidents. Nothing fired.", (r) => {
+  const st = r.attributes && r.attributes.incidentStatus;
+  return { title: r.name, meta: [r.incidentSeverity ? sevPill(r.incidentSeverity) : null, st, r.clusterName, when(r.updatedTime)] };
+});
+const renderChains = (p) => renderList($("chain-body"), p, "No attack paths found.", (r) => (
+  { title: r.name, meta: [r.uiStatus || r.status, r.clusterName, when(r.creationTime)] }
+));
+const renderRisks = (p) => renderList($("risk-body"), p, "No open security risks.", (r) => {
+  const n = r.affectedResourcesCount;
+  return { title: r.securityRiskName, meta: [r.severity ? sevPill(r.severity) : null, r.category, typeof n === "number" ? fmt(n) + " resources" : null] };
+});
+
+// ---------- loading ----------
+function vulnInput() {
+  const i = { severity: $("sev").value, page_size: 10 };
+  if (pressed("f-inuse")) i.in_use = true;
+  if (pressed("f-expl")) i.exploitable = true;
+  return i;
+}
+// Runs one section. A newer load (runId moved on) makes this one's result stale.
+function section(key, body, promise, render, mine) {
+  return promise.then((p) => { if (mine !== runId) return null; loaded[key] = p; noteAccount(p); render(p); return null; })
+    .catch((e) => { if (mine === runId && body) state(body, errorCopy(e), true); return e; });
+}
+function loadVulns() {
+  state($("vuln-body"), "Loading CVE findings");
+  return section("vulns", $("vuln-body"), call("query_vulnerabilities", vulnInput()), renderVulns, runId);
+}
+// summary is the result the host already delivered for the tool call that opened
+// this view; without it (refresh, account change) the view calls the tool itself.
+function loadAll(summary) {
+  const mine = ++runId; loaded = {};
+  $("refresh").disabled = true;
+  const jobs = [
+    section("summary", null, summary ? Promise.resolve(summary) : call("show_security_brief", {}), renderSummary, mine),
+    loadVulns(),
+    section("incidents", $("inc-body"), call("query_incidents", { page_size: 6, fields: ["guid", "name", "incidentSeverity", "attributes.incidentStatus", "updatedTime", "clusterName"] }), renderInc, mine),
+    section("chains", $("chain-body"), call("query_attack_chains", { page_size: 6 }), renderChains, mine),
+    section("risks", $("risk-body"), call("query_risks", { page_size: 6 }), renderRisks, mine)
+  ];
+  return Promise.all(jobs).then((errs) => {
+    if (mine !== runId) return;
+    $("refresh").disabled = false;
+    const failed = errs.filter(Boolean);
+    $("freshness").textContent = failed.length === jobs.length ? "Could not load from ARMO" : "Live from ARMO · loaded " + when(Date.now()) + (acctGuid ? " · account " + acctGuid : "");
+    if (failed.length === jobs.length) banner("Nothing could be loaded", errorCopy(failed[0]));
+  });
+}
+
+// Fills the account picker. Account names are a convenience: on failure the
+// picker stays on the signed-in account.
+async function loadAccounts() {
+  const asked = account, want = asked.toLowerCase();
+  let matched = false;
+  account = "";                       // list_accounts takes no account
+  const p = await call("list_accounts", {}).catch(() => ({}));
+  const sel = clear($("account"));
+  rows(p).forEach((a) => {
+    const guid = String(a.customerGUID || ""), o = el("option", "", a.customerName || guid);
+    o.value = a.active ? "" : guid;
+    const match = want ? want === guid.toLowerCase() || want === String(a.customerName || "").toLowerCase() : !!a.active;
+    if (match) { o.selected = true; matched = true; }
+    sel.appendChild(o);
+  });
+  if (!sel.options.length) sel.appendChild(el("option", "", "Signed-in account"));
+  // The tool call named an account the list could not confirm (names may be
+  // unavailable): keep querying it as asked, never fall back to another one.
+  if (want && !matched) {
+    const o = el("option", "", asked);
+    o.value = asked; o.selected = true;
+    sel.appendChild(o);
+  }
+  sel.disabled = sel.options.length < 2;
+  account = sel.value;
+}
+
+// Starts once the host has said which account the tool call asked for, or after
+// a short wait if it never does.
+async function start() {
+  if (started || !connected) return;
+  started = true;
+  $("freshness").textContent = "Loading from ARMO";
+  $("brief-btn").disabled = false;
+  await loadAccounts();
+  loadAll(initial);
+}
+
+// ---------- host ----------
+function applyHostContext(ctx) {
+  if (!ctx) return;
+  if (ctx.theme === "dark" || ctx.theme === "light") document.documentElement.dataset.theme = ctx.theme;
+  const font = ctx.styles && ctx.styles.variables && ctx.styles.variables["--font-sans"];
+  if (font) document.documentElement.style.setProperty("--font-sans", font);
+}
+
+// Handlers go on before connect() so no notification is missed.
+app.ontoolinput = (p) => {
+  const a = p && p.arguments && p.arguments.account;
+  if (typeof a === "string") account = a;
+  start();
+};
+app.ontoolresult = (r) => {
+  try { initial = envelope(r); } catch (e) { initial = null; }
+  if (started && initial && !loaded.summary) { loaded.summary = initial; renderSummary(initial); }
+  start();
+};
+app.onhostcontextchanged = applyHostContext;
+
+// ---------- wiring ----------
+$("refresh").addEventListener("click", () => loadAll(null));
+$("account").addEventListener("change", function () { account = this.value; acctGuid = ""; loadAll(null); });
+$("sev").addEventListener("change", () => { if (started) loadVulns(); });
+["f-inuse", "f-expl"].forEach((id) => {
+  $(id).addEventListener("click", function () {
+    this.setAttribute("aria-pressed", pressed(id) ? "false" : "true");
+    if (started) loadVulns();
+  });
+});
+$("brief-btn").addEventListener("click", async () => {
+  const out = $("brief-out"), btn = $("brief-btn");
+  btn.disabled = true;
+  const scope = acctGuid ? " for ARMO account " + acctGuid : "";
+  try {
+    const r = await app.sendMessage({ role: "user", content: [{ type: "text", text: "Using the ARMO tools, look at my critical and exploitable CVEs, runtime incidents, attack paths and security risks" + scope + ", and name the three things to fix first, most urgent first." }] });
+    out.className = r && r.isError ? "state err" : "state";
+    out.textContent = r && r.isError ? "The chat did not accept the message." : "Sent. Claude answers in the chat.";
+  } catch (e) {
+    out.className = "state err";
+    out.textContent = "Could not send the message to the chat.";
+  }
+  btn.disabled = false;
+});
+
+const noHost = setTimeout(() => {
+  if (!connected) banner("Waiting for the host", "This view runs inside an MCP Apps host such as Claude. Opened on its own, it has no connection to ARMO.");
+}, 4000);
+app.connect().then(() => {
+  connected = true;
+  clearTimeout(noHost);
+  banner("");
+  applyHostContext(app.getHostContext());
+  setTimeout(start, 1500);
+}).catch((e) => {
+  clearTimeout(noHost);
+  $("freshness").textContent = "Not connected";
+  banner("Could not connect to the host", (e && e.message) || "");
+});
+</script>
+</body>
+</html>
